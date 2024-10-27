@@ -9,7 +9,11 @@ class BWT:
         ret_str = f"{'L':<5} {'F':<5} {'Map':<5}\n"
         for sigma in sorted(self.f_vectors.keys()):
             for i, char in enumerate(self.f_vectors[sigma]):
-                ret_str += f"{char:5s} {sigma:5s} {self.lf_vectors[sigma][i]}\n"
+                try:
+                    ret_str += f"{char:5s} {sigma:5s} {self.lf_vectors[sigma][i]}\n"
+                except:
+                    ret_str += f"{char:5s} {sigma:5s} {self.lf_vectors[sigma][0]}\n"
+                    # print("Fucked up", self.lf_vectors[sigma])
         return ret_str
 
     def _build_bwt(self):
