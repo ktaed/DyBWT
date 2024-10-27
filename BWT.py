@@ -4,10 +4,8 @@ class BWT:
     Transforms input string into BWT representation using F-vectors and LF-mapping.
     """
     def __init__(self, input_string):
-        # Append end-of-string marker '$' to input string
-        self.input = input_string + '$'
         # Build the BWT structures: F-vectors (first column) and LF-mapping vectors
-        self.f_vectors, self.lf_mapping, self.counts = self._build_bwt()
+        self.f_vectors, self.lf_mapping, self.counts = self._build_bwt(input_string + '$')
 
     def __str__(self):
         """
@@ -40,7 +38,7 @@ class BWT:
         
         return ret_str
 
-    def _build_bwt(self):
+    def _build_bwt(self, input):
         """
         Builds the Burrows-Wheeler Transform structures.
         
@@ -55,7 +53,7 @@ class BWT:
         char_counts = {} # Keeps track of character occurrences
 
         # Generate all rotations of input string and sort them
-        rotations = sorted(self.input[i:] + self.input[:i] for i in range(len(self.input)))
+        rotations = sorted(input[i:] + input[:i] for i in range(len(input)))
 
         # Process each rotation to build BWT structures
         for rotation in rotations:
