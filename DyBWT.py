@@ -6,24 +6,38 @@ class DyBWT(BWT):
         # Initialize other necessary data structures
     
     def add(self, substring):
-        # Implement insertion logic 
-
-        #TODO fix the offet issue
         temp_bwt = BWT(substring)
-        f_len = { x: len(self.f_vectors[x]) if x in self.f_vectors else 0 for x in set(self.f_vectors.keys()).union(set(temp_bwt.f_vectors.keys()))}
+        all_keys = set(self.lf_mapping.keys()) | set(temp_bwt.lf_mapping.keys())
+        
+        for key in sorted(all_keys):
+            if key in self.lf_mapping and key in temp_bwt.lf_mapping:
+                for i in range(len(temp_bwt.lf_mapping[key])):
+                    cur_char = temp_bwt.f_vectors[key][i]
+                    try:
+                        offset = self.counts[cur_char]
+                    except:
+                        offset = 0
+                    temp_bwt.lf_mapping[key][i] += offset
+            elif key in temp_bwt.lf_mapping:
+                for i in range(len(temp_bwt.lf_mapping[key])):
+                    cur_char = temp_bwt.f_vectors[key][i]
+                    try:
+                        offset = self.counts[cur_char]
+                    except:
+                        offset = 0
+                    temp_bwt.lf_mapping[key][i] += offset
 
-        for sigma in temp_bwt.lf_vectors.keys():
-            for c, i in temp_bwt.lf_vectors[sigma]:
-                try:
-                    self.lf_vectors[sigma].append((c, i+f_len[c]))
-                except:
-                    self.lf_vectors[sigma] = [(c, i)]
-        for sigma in temp_bwt.f_vectors.keys():
-            try:    
-                self.f_vectors[sigma] += temp_bwt.f_vectors[sigma]
-            except:
-                self.f_vectors[sigma] = temp_bwt.f_vectors[sigma]
-
+            if key in self.f_vectors and key in temp_bwt.f_vectors:
+                self.f_vectors[key] += temp_bwt.f_vectors[key]
+                self.lf_mapping[key] += temp_bwt.lf_mapping[key]
+            elif key in temp_bwt.f_vectors:
+                self.f_vectors[key] = temp_bwt.f_vectors[key]
+                self.lf_mapping[key] = temp_bwt.lf_mapping[key]
+        for key in all_keys:
+            if key not in self.counts:
+                self.counts[key] = temp_bwt.counts[key]
+            elif key in self.counts and key in temp_bwt.counts:
+                self.counts[key] += temp_bwt.counts[key]
 
     def get_bwt(self):
         """Returns the current BWT string"""
@@ -32,111 +46,111 @@ class DyBWT(BWT):
             result.append(self.f_vectors[key])
         return ''.join(result)
     
-    def get_original(self,index=-1):
-        """Reconstructs and returns the original text"""
+    def get_original(self, index):
+        """
+        Reconstructs original string starting from given index
+        Args:
+            index: Starting position in the BWT
+        Returns:
+            Original string or empty string if invalid
+        """
+        # Edge case: Empty BWT
         if not self.f_vectors:
             return ""
+            
+        # Edge case: Invalid index
         least_char = min(self.f_vectors.keys())
-        sequences = []                          
-
-        if index >=0 and index < len(self.f_vectors[least_char]):
-            sequence = ""
-            last_char = least_char
-            current_char = self.f_vectors[least_char][index]
-            while current_char != '$':
-                sequence += current_char
-                next_index = self.lf_vectors[last_char][index][1]
-                last_char = current_char
-                current_char = self.f_vectors[last_char][next_index]
-                index = next_index
-
-            sequences.append(sequence[::-1])
-        elif index == -1:
-            indices = range( 0, len(self.f_vectors[least_char]))
-            # print(indices)
-            for index in indices:
-                sequence = ""
-                last_char = least_char
-                current_char = self.f_vectors[least_char][index]
-                while current_char != '$':
-                    sequence += current_char
-                    next_index = self.lf_vectors[last_char][index][1]
-                    last_char = current_char
-                    current_char = self.f_vectors[last_char][next_index]
-                    index = next_index
-                    # print(index,sequence, next_index, current_char, last_char)
-                sequences.append(sequence[::-1])
-
+        if index < 0 or index >= len(self.f_vectors[least_char]):
+            return ""
+            
+        sequence = ""
+        current_char = self.f_vectors[least_char][index]
+        next_index = self.lf_mapping[least_char][index]
+        print(least_char, current_char, next_index)
+        # Edge case: Prevent infinite loops
+        seen_positions = set()
         
-        return '\t'.join(sequences)
-    
+        try:
+            while True:
+                sequence += current_char           
+                next_char = self.f_vectors[current_char][next_index]
+                next_index = self.lf_mapping[current_char][next_index]
+                current_char = next_char
+                if next_char == '$':
+                    break
+            return sequence[::-1]
+        except (KeyError, IndexError):
+            # Edge case: Any unexpected access errors
+            return ""
+            
+        return sequence[::-1]
+    def get_originals(self):
+        ret_lst = []
+        least_char = min(self.f_vectors.keys())
+        for i in range(len(self.f_vectors[least_char])):
+            ret_lst.append(self.get_original(i))
+        return ret_lst
+        
     def search(self, pattern):
-        """Returns the number of occurrences of the pattern"""
-        if not pattern:
-            return 0
-            
-        current_char = pattern[-1]
-        if current_char not in self.f_vectors:
-            return 0
-            
-        # Find initial range
-        matches = len(self.f_vectors[current_char])
-        
-        # Iterate through pattern backwards
-        for char in reversed(pattern[:-1]):
-            if char not in self.f_vectors:
-                return 0
-            # Update matches using LF-mapping
-            new_matches = 0
-            for mapping in self.lf_vectors[char]:
-                if mapping[1] <= matches:
-                    new_matches += 1
-            matches = new_matches
-            
-        return matches
+        #TODO
+        pass
+
     
     def __len__(self):
         """Returns the total length of the transformed text"""
-        return sum(len(v) for v in self.f_vectors.values())
+        return sum(self.counts.values)
     
-    def __str__(self):
-        """String representation showing BWT and original text"""
-        bwt = self.get_bwt()
-        original = self.get_original()
-        return f"BWT: {bwt}\nOriginal: {original}"
+    # def __str__(self):
+    #     """String representation showing BWT and original text"""
+    #     bwt = self.get_bwt()
+    #     original = self.get_original()
+    #     return f"BWT: {bwt}\nOriginal: {original}"
     
 
 if __name__ == "__main__":
-    # Test case 1: Basic operations and search
-    print("\n=== Test Case 1: Basic Operations and Search ===")
-    print("Regular BWT of 'banana':")
+    # Initialize with first sequence
+    bwt = DyBWT("hello")
+    print("\nAfter initializing with 'hello':")
+    print(f"Original (0): {bwt.get_original(0)}")
     
-    bwt = DyBWT("banana")
-    print("\nInitial DyBWT of 'banana':")
-    print(f"BWT string: {bwt.get_bwt()}")
-    print(f"Original (first sequence): {bwt.get_original(0)}")
-    print(f"Original (all sequences): {bwt.get_original(-1)}")
-    print(f"Search 'ana': {bwt.search('ana')} occurrences")
-    print(f"Search 'na': {bwt.search('na')} occurrences")
-    print(f"Search 'ban': {bwt.search('ban')} occurrences")
+    # Add and test second sequence
+    bwt.add("world")
+    print("\nAfter adding 'world':")
+    print(f"Original (0): {bwt.get_original(0)}")
+    print(f"Original (1): {bwt.get_original(1)}")
     
-    print("\nRegular BWT of 'ananab':")
+    # Add and test third sequence
+    bwt.add("happy")
+    print("\nAfter adding 'happy':")
+    print(f"Original (0): {bwt.get_original(0)}")
+    print(f"Original (1): {bwt.get_original(1)}")
+    print(f"Original (2): {bwt.get_original(2)}")
     
-    bwt.add("ananab")
-    print("\nAfter adding 'ananab':")
-    print(f"BWT string: {bwt.get_bwt()}")
-    print(f"Original (sequence 0): {bwt.get_original(0)}")
-    print(f"Original (sequence 1): {bwt.get_original(1)}")
-    print(f"Original (all sequences): {bwt.get_original(-1)}")
-    print(f"Search 'ana': {bwt.search('ana')} occurrences")
-    print(f"Search 'nab': {bwt.search('nab')} occurrences")
-    print(f"Search 'ba': {bwt.search('ba')} occurrences")
-    print(f"Search 'a': {bwt.search('a')} occurrences")
-    print("\nFull BWT representation:")
-    print(bwt)
+    # Add and test fourth sequence
+    bwt.add("smile")
+    print("\nAfter adding 'smile':")
+    print(f"Original (0): {bwt.get_original(0)}")
+    print(f"Original (1): {bwt.get_original(1)}")
+    print(f"Original (2): {bwt.get_original(2)}")
+    print(f"Original (3): {bwt.get_original(3)}")
+    
+    # Add and test fifth sequence
+    bwt.add("dance")
+    print("\nAfter adding 'dance':")
+    print(f"Original (0): {bwt.get_original(0)}")
+    print(f"Original (1): {bwt.get_original(1)}")
+    print(f"Original (2): {bwt.get_original(2)}")
+    print(f"Original (3): {bwt.get_original(3)}")
+    print(f"Original (4): {bwt.get_original(4)}")
+    
+    # Print final BWT string
+    print("\nFinal BWT string:")
+    print(bwt.get_bwt())
+    
+    # Print all sequences at once
+    print("\nAll sequences:")
+    print(bwt.get_originals())
 
-    # Test case 2: Edge case searches
-    print("\n=== Test Case 2: Edge Case Searches ===")
-    print(f"Search empty string: {bwt.search('')} occurrences")
-    print(f"Search non-existent pattern 'xyz': {bwt.search('xyz')} occurrences")
-    print(f"Search pattern longer than text 'bananananana': {bwt.search('bananananana')} occurrences")
+    # print(BWT("banana"))
+    # print(BWT("ananab"))
+    # print(BWT("cadabra"))
