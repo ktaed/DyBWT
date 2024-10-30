@@ -14,10 +14,11 @@ class BWT:
         F: First column characters
         Map: LF-mapping values for each character
         """
-        ret_str = f"{'L':<5}\t{'F':<5}\t{'Map':<5}\n"
+        ret_str = f"{'Index':<5} {'L':<5}\t{'F':<5}\t{'Map':<5}\n"
         ret_str += "-" * 25 + "\n"
         
         # Iterate through sorted characters in first column
+        index = 0
         for sigma in sorted(self.f_vectors.keys()):
             # Get corresponding last column characters
             last_chars = self.f_vectors[sigma]
@@ -28,7 +29,8 @@ class BWT:
             for i in range(len(last_chars)):
                 last_char = last_chars[i]
                 mapping = mappings[i]
-                ret_str += f"{last_char:<5}\t{sigma:<5}\t{mapping}\n"
+                ret_str += f"{index:<5}\t{last_char:<5}\t{sigma:<5}\t{mapping}\n"
+                index += 1
         
         # Add summary information
         ret_str += "-" * 25 + "\n"
