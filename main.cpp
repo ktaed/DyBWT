@@ -1,16 +1,18 @@
 #include "DyBWT.cpp"
 #include <iostream>
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 int isNotACTGN(char c) {
     return  !std::isalnum(c);
-    //!(c == 'A' || c == 'C' || c == 'T' || c == 'G' || c == 'N');
 }
 
 std::map<std::string, std::string> read_fasta(const std::string& filepath) {
     std::map<std::string, std::string> sequences;
     std::ifstream file(filepath);
     std::string line, header, sequence;
-    std::set<char> alphabet, letters, diff;
+    std::set<char> alphabet;
     for (char c : "ACGTN$") {
         alphabet.insert(c);
     }
@@ -22,19 +24,12 @@ std::map<std::string, std::string> read_fasta(const std::string& filepath) {
         if (line.empty()) continue;
         
         if (line[0] == '>') {
-            // If we have a previous sequence, save it
             if (!header.empty()) {
                 sequences[header] = sequence;
             }
-            // Start new sequence
-            // line.replace(line.find(' '), 1, "_");
             header = line;  // Remove '>' character
             sequence.clear();
         } else {
-            // Append to current sequence
-            // letters.insert(line.begin(), line.end());
-            // std::set_difference(letters.begin(), letters.end(), alphabet.begin(), alphabet.end(), std::inserter(diff, diff.begin()));
-            
             std::replace_if(line.begin(), line.end(), isNotACTGN, 'N');
 
             sequence += line;
@@ -52,67 +47,122 @@ std::map<std::string, std::string> read_fasta(const std::string& filepath) {
 
 
 int main() {
+    std::cout << "\n=== Processing FASTA Files in Current Directory ===\n\n";
+    
+    // Get all .fasta files in current directory
+    std::vector<std::string> fasta_files;
+    for (const auto& entry : fs::directory_iterator(".")) {
+        if (entry.path().extension() == ".fasta" || entry.path().extension() == ".fna") {
+            fasta_files.push_back(entry.path().string());
+        }
+    }
+
+    if (fasta_files.empty()) {
+        std::cout << "No FASTA files found in current directory\n";
+        return 1;
+    }
+
+    std::cout << "Found " << fasta_files.size() << " FASTA files\n\n";
+
     try {
-        std::string path = "/home/tsosie-schneider/Downloads/ncbi_dataset/data/GCA_000006155.2/GCA_000006155.2_ASM615v2_genomic.fna";
-        // std::string path = "/home/tsosie-schneider/Downloads/ncbi_dataset/data/GCA_000008165.1/GCA_000008165.1_ASM816v1_genomic.fna";
-        auto sequences = read_fasta(path);
-        // DyBWT ref_bwt("");
-        int i = 0;
-        std::vector<std::string> seqs;
-        for (const auto [header, seq] : sequences) {
-            std::cout << "Header: " << header << " " << seq.length() << "\n";
-            seqs.push_back(seq);
+        // Process first file to initialize DyBWT
+        std::cout << "Processing initial file: " << fasta_files[0] << "\n";
+        auto initial_sequences = read_fasta(fasta_files[0]);
+        if (initial_sequences.empty()) {
+            throw std::runtime_error("No sequences found in initial file");
         }
-        DyBWT ref_bwt(seqs[0]);
-        ref_bwt.add(seqs[1]);
-        ref_bwt.add(seqs[2]);
-        std::vector<int> matches;
-        for (const auto& [header, seq] : sequences) {
-            // for (int i = 0; i < seq.length(); i++) {
-            matches =ref_bwt.search(seq.substr(0, seq.length()-100));
-            std::cout << "Matches for " << header << ": ";
-            for (int j : matches) {
-                std::cout << j << " ";
+
+        // Initialize with first sequence
+        auto first_seq = initial_sequences.begin();
+        DyBWT dybwt(first_seq->second);
+        std::cout << "Initialized with sequence: " << first_seq->first << "\n";
+        std::cout << dybwt.show_properties() << "\n";
+
+        // Add remaining sequences from first file
+        for (auto it = std::next(initial_sequences.begin()); it != initial_sequences.end(); ++it) {
+            std::cout << "Adding sequence: " << it->first << "\n";
+            dybwt.add(it->second);
+        }
+
+        // Process remaining files
+        for (size_t i = 1; i < fasta_files.size(); ++i) {
+            std::cout << "\nProcessing file: " << fasta_files[i] << "\n";
+            auto sequences = read_fasta(fasta_files[i]);
+            
+            for (const auto& [header, seq] : sequences) {
+                std::cout << "Adding sequence: " << header << "\n";
+                dybwt.add(seq);
             }
-            std::cout << std::endl;
         }
-        // std::cout << ref_bwt.show() << std::endl;
+
+        // Final BWT properties
+        std::cout << "\n=== Final BWT Properties ===\n";
+        std::cout << dybwt.show_properties() << "\n";
+
+        // Test searching for original sequences
+        std::cout << "\n=== Testing Original Sequence Searches ===\n";
+        for (const auto& file : fasta_files) {
+            std::cout << "\nTesting sequences from: " << file << "\n";
+            auto sequences = read_fasta(file);
+            
+            for (const auto& [header, seq] : sequences) {
+                std::cout << "\nSearching for sequence: " << header << "\n";
+                std::cout << "Sequence length: " << seq.length() << "\n";
+                
+                // Test full sequence
+                auto matches = dybwt.search(seq);
+                std::cout << "Full sequence matches: " << matches.size() << " at positions: ";
+                for (size_t i = 0; i < std::min(matches.size(), size_t(5)); ++i) {
+                    std::cout << matches[i] << " ";
+                }
+                if (matches.size() > 5) std::cout << "...";
+                std::cout << "\n";
+                
+                // Test prefix (first 1000 bp)
+                size_t prefix_len = std::min(seq.length(), size_t(1000));
+                matches = dybwt.search(seq.substr(0, prefix_len));
+                std::cout << "Prefix (" << prefix_len << "bp) matches: " << matches.size() << " at positions: ";
+                for (size_t i = 0; i < std::min(matches.size(), size_t(5)); ++i) {
+                    std::cout << matches[i] << " ";
+                }
+                if (matches.size() > 5) std::cout << "...";
+                std::cout << "\n";
+                
+                // Test suffix (last 1000 bp)
+                size_t suffix_start = (seq.length() > 1000) ? seq.length() - 1000 : 0;
+                matches = dybwt.search(seq.substr(suffix_start));
+                std::cout << "Suffix (" << seq.length() - suffix_start << "bp) matches: " << matches.size() << " at positions: ";
+                for (size_t i = 0; i < std::min(matches.size(), size_t(5)); ++i) {
+                    std::cout << matches[i] << " ";
+                }
+                if (matches.size() > 5) std::cout << "...";
+                std::cout << "\n";
+            }
+        }
+
+        // Original pattern testing remains
+        std::cout << "\n=== Testing Standard Pattern Searches ===\n";
+        std::vector<std::string> test_patterns = {
+            "ATGC", "GCTA", "TGCA", "CATG",
+            "ATGCATGC", "GCATGCAT"
+        };
+
+        for (const auto& pattern : test_patterns) {
+            auto matches = dybwt.search(pattern);
+            std::cout << "Pattern '" << pattern << "': " 
+                      << matches.size() << " matches at positions: ";
+            for (size_t i = 0; i < std::min(matches.size(), size_t(10)); ++i) {
+                std::cout << matches[i] << " ";
+            }
+            if (matches.size() > 10) std::cout << "...";
+            std::cout << "\n";
+        }
+
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return 1;
     }
 
-    // DyBWT ref_bwt("banana");
-    // std::cout << ref_bwt.get_bwt() << std::endl;
-    // ref_bwt.add("ananab");
-    // std::cout << ref_bwt.get_bwt() << std::endl;
-    // ref_bwt.add("abracadabra");
-    // // std::cout << ref_bwt.get_bwt() << std::endl;
-    // // ref_bwt.add("arbadacarba");
-
-    // std::cout << ref_bwt.show() << std::endl;
-    // std::cout << "Done" << std::endl;
-    // // std::cout << ref_bwt.show() << std::endl;
-    // for (int i : ref_bwt.search("banana")) {
-    //     std::cout << "banana: " << i << " ";
-    // }
-    // std::cout << std::endl;
-    // for (int i : ref_bwt.search("ananab")) {
-    //     std::cout << "ananab: " << i << " ";
-    // }
-    // std::cout << std::endl;
-
-    // for (int i : ref_bwt.search("abracadabra")) {
-    //     std::cout << "abracadabra: " << i << " ";
-    // }
-    // std::cout << std::endl;
-
-    // for (int i : ref_bwt.search("arbadacarba")) {
-    //     std::cout << "arbadacarba: " << i << " ";
-    // }
-    // std::cout << std::endl;
-
-    // std::cout << ref_bwt.show() << std::endl;
     return 0;
 }
 

@@ -7,24 +7,48 @@
 #include <sdsl/bit_vectors.hpp>
 #include <valarray>
 #include <algorithm>
+#include <sstream>
 
 class DyBWT{
-public:
-    // Data members from Python implementation
-    std::set<char> alphabet;
-    
+private:
+    // Stores the alphabet (unique characters) found in all sequences
+    std::set<char> alphabet;    
+
+    // Maps each character to its corresponding column in the BWT matrix
+    // Key: character, Value: string of characters in that column
     std::map<char, std::string> f_vectors;
+
+    // Maps each character to its Last-to-First (LF) mapping values
+    // Key: character, Value: vector of indices for LF mapping
     std::map<char, std::vector<int>> lf_mapping;
+
+    // Stores the count of each character in the sequences
+    // Key: character, Value: number of occurrences
     std::map<char, int> counts;
-    // std::vector<saidx_t> prim_idxs;
+
+    // Total number of sequences added to the structure
     int seq_total = 0;
 
+
+    /**
+     * Builds the Burrows-Wheeler Transform (BWT) of the input text
+     * 
+     * @param text The input string to transform
+     * @return The BWT string with '$' sentinel character inserted
+     * 
+     * Steps:
+     * 1. Allocates memory for BWT computation
+     * 2. Uses divsufsort's divbwt to compute BWT
+     * 3. Converts result to string and inserts '$' at primary index
+     * 4. Returns final BWT string with sentinel character
+     * 
+     * Note: Uses libdivsufsort for efficient suffix array construction
+     */
     std::string build_bwt(std::string& text)
     {
         saidx_t p_idx;
         sauchar_t *bwt = (sauchar_t*)malloc((1+text.length()) * sizeof(sauchar_t));
         p_idx = divbwt((const sauchar_t*)text.c_str(), bwt, NULL, text.length());
-        // prim_idxs.push_back(p_idx);
         bwt[text.length()] ='\0';
         std::string temp((char*)bwt), ret_str;
         free(bwt);
@@ -35,6 +59,23 @@ public:
         return ret_str;
     }
     
+    /**
+     * Builds the split vector representation of a BWT string
+     * 
+     * @param bwt          The BWT string to process
+     * @param chr_counts   Map to store character frequencies
+     * @param sigma        Set to store alphabet of unique characters
+     * @param f_vect       Map to store F-vectors (first column of BWT matrix)
+     * @param lf_map       Map to store LF-mapping values for each character
+     * 
+     * Function:
+     * 1. Splits BWT string into character-specific vectors
+     * 2. Computes character frequencies
+     * 3. Builds LF-mapping for each character position
+     * 4. Constructs F-vectors for BWT matrix columns
+     * 
+     * Note: Core component for dynamic BWT operations
+     */
     void build_vectors(std::string& bwt, 
         std::map<char, int>& chr_counts,
         std::set<char>& sigma,
@@ -42,7 +83,6 @@ public:
         std::map<char, std::vector<int>>& lf_map
     ) 
     {
-        // std::map<char, int> chr_counts;
         std::vector<int> mapping;
         for (char c : bwt) {
             if (!sigma.contains(c)) {
@@ -56,8 +96,7 @@ public:
                 mapping.push_back(chr_counts[c]);
                 chr_counts[c] += 1;
             }
-                sigma.insert(c);
-            
+                sigma.insert(c);            
         }
 
         int i = 0, j = 0;
@@ -66,30 +105,35 @@ public:
             f_vect[c] = bwt.substr(i, j);
             lf_map[c].insert(lf_map[c].end(), mapping.begin()+ i, mapping.begin()+ i +j );
             i += j;
-
-
         }
-
-        for (char c : sigma) {
-            std::cout << c << " " << chr_counts[c] << std::endl;
-        }
-        // if (temp == bwt) {
-        //     std::cout << "Strings are equal" << std::endl;
-        // }
-
-
     }
-// public:
+    public:
     // Constructor
     DyBWT(std::string initial_string){
         std::string bwt = build_bwt(initial_string);
         build_vectors(bwt, counts, alphabet, f_vectors, lf_mapping);
-        seq_total += 1;
+        seq_total++;
 
     }
 
-    // Add new sequence
-    // TODO: fix bug that in here not allowing added seqs to be
+    /**
+     * Adds a new sequence to the dynamic BWT structure
+     * 
+     * @param substring The new sequence to add to the existing BWT
+     * 
+     * Process:
+     * 1. Builds BWT of new sequence
+     * 2. Creates split vector representation of new sequence
+     * 3. Updates alphabet with new characters
+     * 4. Merges vectors:
+     *    - Pre-allocates space for efficiency
+     *    - Updates LF-mapping offsets based on existing counts
+     *    - Appends new F-vectors and LF-mappings
+     * 5. Updates character counts
+     * 
+     * Note: Critical for maintaining dynamic BWT structure when adding sequences.
+     * Handles merging of data structures while preserving BWT properties.
+     */
     void add(std::string substring) {
         std::string bwt = build_bwt(substring);
         std::map<char, int> chr_counts;
@@ -98,43 +142,7 @@ public:
         std::set<char> sigma;
         std::vector<int> mapping;
 
-        // Build vectors directly
-        sigma.clear();
-        for (char c : bwt) {
-            if (!sigma.contains(c)) {
-                sigma.insert(c);
-                chr_counts[c] = 0;
-                mapping.push_back(chr_counts[c]);
-                chr_counts[c] += 1;
-            } else {
-                mapping.push_back(chr_counts[c]);
-                chr_counts[c] += 1;
-            }
-        }
-
-        // Build f_vectors and lf_mapping
-        int i = 0, count = 0;
-        std::string temp = "";
-
-        for (char c : sigma) {
-            count = chr_counts[c];
-            f_vect[c] = bwt.substr(i, count);
-            lf_map[c].insert(lf_map[c].end(), 
-                            mapping.begin() + i, 
-                            mapping.begin() + i + count);
-            i += count;
-            // std::cout << "c: " << c << ":"<< counts[c] << " " << f_vect[c] << " " << lf_map[c].front() << " " << lf_map[c].back() << std::endl;
-        }
-
-        for (char c : sigma) {
-            std::cout << c << " " << chr_counts[c] << std::endl;
-        }
-
-
-        // Merge alphabets
-        // std::set<char> all_sigma;
-        // all_sigma.merge(alphabet);
-        // all_sigma.merge(sigma);
+        build_vectors(bwt, chr_counts, sigma, f_vect, lf_map);
 
         for (char c : alphabet){
             sigma.insert(c);
@@ -176,7 +184,6 @@ public:
                 // Update LF mapping offsets
                 for (size_t i = 0; i < f_vect[c].length(); i++) {
                     char chr = f_vect[c][i];
-                    // counts[chr] += ;
                     int offset = counts[chr];
                     lf_map[c][i] += offset;
                 }
@@ -186,30 +193,17 @@ public:
                 for (int i : lf_map[c]){
                     lf_mapping[c].push_back(i);
                 }
-                // lf_mapping[c].insert(lf_mapping[c].end(), 
-                //                    lf_map[c].begin(), 
-                //                    lf_map[c].end());
             }
 
         }
 
-        // Update counts
         for (char c : sigma) {
             alphabet.insert(c);
         }
 
         for (char c : alphabet) {
-            // if (chr_counts.contains(c)) {
-            //     std::cout << "add PreCount:" << c << ":" << counts[c] << " " << chr_counts[c] << std::endl;
             counts[c] += chr_counts[c];
-            //     std::cout << "add PostCount:" << c << ":" << counts[c] << std::endl;    
-            // }
-            // else {
-            //     std::cout << "No change add PostCount:" << c << ":" << counts[c] << std::endl;    
-            // }
         }
-
-
         seq_total++;
     }
 
@@ -219,7 +213,6 @@ public:
         for (char c : alphabet) {
             result += f_vectors[c];
         }
-        // Implementation similar to Python get_bwt()
         return result;
     }
 
@@ -261,6 +254,16 @@ public:
                 positions.push_back(i);
             }
             return positions;
+        } else if (pattern.length() == 2) {
+            for (int i = 0; i < f_vectors[pattern[0]].length(); i++) {
+                matches.push_back(i);
+            }
+            for (int i : matches) {
+                if (f_vectors[pattern[0]][i] == pattern[1]) {
+                    positions.push_back(i + offset);
+                }
+            }
+            return positions;
         }
         else {
 
@@ -268,8 +271,6 @@ public:
                 matches.push_back(i);
             }
             char start_char = pattern[0];
-            // pattern = pattern.substr(1, pattern.length() - 1);
-            // std::cout << "matches: " << matches.size() << std::endl;
             std::string seq, max_seq;
             int max_idx = 0, max_i = 0;
             for (int idx : matches) {
@@ -277,38 +278,18 @@ public:
                 cur_chr = f_vectors[start_char][idx];
                 nxt_ind = lf_mapping[start_char][idx];
                 for (int i = 1; i < pattern.length(); i++) {
-                    // seq += pattern[i];
-                    nxt_chr = f_vectors[cur_chr][nxt_ind];
-                    nxt_ind = lf_mapping[cur_chr][nxt_ind];
-                    // std::cout << pattern[i] << " " << cur_chr << " " << nxt_chr << std::endl;
-                    // if (i > max_idx) {
-                    //     max_idx = idx;
-                    //     max_i = i;
-                    //     max_seq = seq+cur_chr;
-                    // }
-                    if (pattern[i] != cur_chr) {
-                        // std::cout << "Pattern not found " << idx << " " << i << std::endl;
+                    if (cur_chr != pattern[i]) {
                         break;
                     }
                     seq += cur_chr;
+                    nxt_chr = f_vectors[cur_chr][nxt_ind];
+                    nxt_ind = lf_mapping[cur_chr][nxt_ind];
                     cur_chr = nxt_chr;
-
                 }
-                // std::cout << seq << " " << cur_chr << std::endl;
                 if (seq == pattern) {
-                    // std::cout << idx + offset << "\n";
                     positions.push_back(idx + offset);
                 }
             }
-            // pattern = start_char + pattern;
-            // max_seq = start_char + max_seq;
-            // std::reverse(pattern.begin(), pattern.end());
-            // std::reverse(max_seq.begin(), max_seq.end());
-            // std::cout << "Max idx: " << max_i +1 << " " << max_idx  << std::endl;
-            // std::cout << pattern << std::endl;
-            // std::cout << max_seq  << std::endl;
-            // return positions;
-
         }
         return positions;
 
@@ -318,48 +299,61 @@ public:
     // Length operator
     size_t length() const {
         size_t total = 0;
-        // Sum up counts similar to Python __len__
+        for (auto& [c, f_vect] : f_vectors) {
+            total += f_vect.length();
+        }
         return total;
     }
 
-std::string show() {
-    std::string temp = "";
-    int j = 0;
-
-    for (char c : alphabet) {
-        std::cout << c << " " << f_vectors[c].length() << " " << lf_mapping[c].size() << std::endl;
-        temp += f_vectors[c]    ;
-
+    /**
+     * Displays the current state and properties of the Dynamic BWT
+     * @return String containing the analysis
+     */
+    std::string show_properties() const {
+        std::stringstream ss;
+        size_t total_length = 0;
+        
+        ss << "\n=== Dynamic BWT Properties ===\n";
+        ss << "Number of sequences: " << seq_total << "\n\n";
+        
+        // Alphabet and character statistics
+        ss << "Alphabet size: " << alphabet.size() << "\n";
+        ss << "Character frequencies:\n";
+        for (char c : alphabet) {
+            total_length += f_vectors.at(c).length();
+            ss << "'" << c << "': " << counts.at(c) 
+               << " (F-vector length: " << f_vectors.at(c).length() 
+               << ", LF-mapping size: " << lf_mapping.at(c).size() << ")\n";
+        }
+        
+        // Overall statistics
+        ss << "\nTotal length: " << total_length << "\n";
+        ss << "Average sequence length: " << (total_length / seq_total) << "\n";
+        
+        // First few characters of concatenated BWT
+        ss << "\nBWT preview (first 50 chars): ";
+        std::string bwt_preview;
+        for (char c : alphabet) {
+            bwt_preview += f_vectors.at(c);
+            if (bwt_preview.length() >= 50) break;
+        }
+        ss << bwt_preview.substr(0, 50) << "...\n";
+        
+        return ss.str();
     }
- 
-    return temp;
-}
+
+    std::string show() {
+        std::string temp = "";
+        int j = 0;
+
+        for (char c : alphabet) {
+            std::cout << c << " " << f_vectors[c].length() << " " << lf_mapping[c].size() << std::endl;
+            temp += f_vectors[c]    ;
+
+        }
+     
+        return temp;
+    }
     
 };
-
-// Main function with test cases
-// int main() {
-//     // Test Case 1: Basic Single Sequence
-//     std::cout << "\n=== Test Case 1: Basic Single Sequence ===\n";
-//     DyBWT bwt("banana");
-//     std::cout << "Initial text: 'banana'\n";
-//     std::cout << bwt.show() << std::endl;
-//     std::cout << bwt.get_bwt() << std::endl;
-    
-//     // Test Case 2: Two Sequences
-//     std::cout << "\n=== Test Case 2: Two Sequences ===\n";
-//     bwt.add("ananab");
-//     std::cout << bwt.show() << std::endl;
-//     std::cout << bwt.get_bwt() << std::endl;
-
-//     // Test Case 3: Three Sequences
-//     std::cout << "\n=== Test Case 3: Three Sequences ===\n";
-//     bwt.add("abracadabra");
-//     std::cout << bwt.show() << std::endl;
-//     std::cout << bwt.get_bwt() << std::endl;
-
-
-
-//     return 0;
-// }
 
