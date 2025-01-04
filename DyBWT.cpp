@@ -103,7 +103,8 @@ private:
         for (char c : sigma) {
             j = chr_counts[c];
             std::copy(bwt.begin() + i, bwt.begin() + i + j, std::back_inserter(f_vect[c]));
-            lf_map[c].insert(lf_map[c].end(), mapping.begin()+ i, mapping.begin()+ i +j );
+            std::copy(mapping.begin() + i, mapping.begin() + i + j, std::back_inserter(lf_map[c]));
+            // lf_map[c].insert(lf_map[c].end(), mapping.begin()+ i, mapping.begin()+ i +j );
             i += j;
         }
     }
@@ -173,24 +174,20 @@ private:
 
             }   
             else if (sigma.contains(c)) {
-                continue;
-                // std::cout << "sigma contains: " << c << " " << f_vect[c].length () << " " << lf_map[c].size() << std::endl;
-                // size_t new_size = f_vect[c].length();
-                // f_vectors[c].reserve(new_size);
-                // lf_mapping[c].reserve(lf_map[c].size());
+                size_t new_size = f_vect[c].size();
+                f_vectors[c].reserve(new_size);
+                lf_mapping[c].reserve(lf_map[c].size());
 
-                // // Update LF mapping offsets
-                // for (size_t i = 0; i < f_vect[c].length(); i++) {
-                //     char chr = f_vect[c][i];
-                //     int offset = counts[chr];
-                //     lf_map[c][i] += offset;
-                // }
+                // Update LF mapping offsets
+                for (size_t i = 0; i < f_vect[c].size(); i++) {
+                    char chr = f_vect[c][i];
+                    int offset = counts[chr];
+                    lf_map[c][i] += offset;
+                }
 
-                // // Merge vectors
-                // f_vectors[c].append(f_vect[c]);
-                // for (int i : lf_map[c]){
-                //     lf_mapping[c].push_back(i);
-                // }
+                // Merge vectors
+                std::copy(f_vect[c].begin(), f_vect[c].end(), std::back_inserter(f_vectors[c]));
+                std::copy(lf_map[c].begin(), lf_map[c].end(), std::back_inserter(lf_mapping[c]));
             }
 
         }
@@ -383,7 +380,7 @@ private:
      * Displays the current state and properties of the Dynamic BWT
      * @return String containing the analysis
      */
-    std::string show_properties() const {
+    std::string show_properties() {
         std::stringstream ss;
         size_t total_length = 0;
         
@@ -394,10 +391,19 @@ private:
         ss << "Alphabet size: " << alphabet.size() << "\n";
         ss << "Character frequencies:\n";
         for (char c : alphabet) {
-            total_length += f_vectors.at(c).size();
-            ss << "'" << c << "': " << counts.at(c) 
-               << " (F-vector length: " << f_vectors.at(c).size() 
-               << ", LF-mapping size: " << lf_mapping.at(c).size() << ")\n";
+            // Check if character exists in all maps before accessing
+            if (f_vectors.count(c) && counts.count(c) && lf_mapping.count(c)) {
+                total_length += f_vectors.at(c).size();
+                ss << "'" << c << "': " << counts.at(c) 
+                   << " (F-vector length: " << f_vectors.at(c).size() 
+                   << ", LF-mapping size: " << lf_mapping.at(c).size() << ")\n";
+            } else {
+                ss << "'" << c << "': WARNING - Missing from one or more maps"
+                   << " (f_vectors: " << (f_vectors.count(c) ? "yes" : "no")
+                   << ", counts: " << (counts.count(c) ? "yes" : "no")
+                   << ", lf_mapping: " << (lf_mapping.count(c) ? "yes" : "no")
+                   << ")\n";
+            }
         }
         
         // Overall statistics
@@ -411,7 +417,12 @@ private:
             bwt_preview += std::string(f_vectors.at(c).begin(), f_vectors.at(c).end());
             if (bwt_preview.length() >= 50) break;
         }
-        ss << bwt_preview.substr(0, 50) << "...\n";
+        if (bwt_preview.length() < 50) {
+            ss << bwt_preview << "...\n";
+        }
+        else {
+            ss << bwt_preview.substr(0, 50) << "...\n";
+        }
         
         return ss.str();
     }
