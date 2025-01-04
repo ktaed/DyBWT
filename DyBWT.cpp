@@ -296,6 +296,80 @@ private:
 
     }
 
+    int max_suf_depth(std::string pattern) {
+        int max_i = 0;
+        std::vector<int> matches, positions;
+        int offset = 0;
+        std::reverse(pattern.begin(), pattern.end());
+        bool found = false;
+        int nxt_ind, cur_ind;
+        char nxt_chr, cur_chr;
+
+        if (pattern.length() == 0) {
+            return -1;
+        }
+        for (char c : alphabet) {
+            if (c < pattern[0]) {
+                offset += f_vectors[c].length();
+            }
+        }
+
+        if (pattern.length() == 1) {
+            for (int i = offset; i < offset + f_vectors[pattern[0]].length(); i++) {
+                positions.push_back(i);
+            }
+            if (positions.size() > 0) {
+                return 1;
+            }
+            return -1;
+        } else if (pattern.length() == 2) {
+            for (int i = 0; i < f_vectors[pattern[0]].length(); i++) {
+                matches.push_back(i);
+            }
+            for (int i : matches) {
+                if (f_vectors[pattern[0]][i] == pattern[1]) {
+                    positions.push_back(i + offset);
+                }
+            }
+            if (positions.size() > 0) {
+                return 2;
+            }
+            return -1;
+        }
+        else {
+
+            for (int i = 0; i < f_vectors[pattern[0]].length(); i++) {
+                matches.push_back(i);
+            }
+            if (matches.size() == 0) {
+                return -1;
+            }
+            char start_char = pattern[0];
+            std::string seq, max_seq;
+            
+            int i;
+            for (int idx : matches) {
+                seq = pattern[0];
+                cur_chr = f_vectors[start_char][idx];
+                nxt_ind = lf_mapping[start_char][idx];
+                for (i = 1; i < pattern.length(); i++) {
+                    if (cur_chr != pattern[i]) {
+                        break;
+                    }
+                    seq += cur_chr;
+                    nxt_chr = f_vectors[cur_chr][nxt_ind];
+                    nxt_ind = lf_mapping[cur_chr][nxt_ind];
+                    cur_chr = nxt_chr;
+                }
+                if (i > max_i) {
+                    max_i = i;
+                }
+            }
+        }
+
+
+        return max_i;
+    }
     // Length operator
     size_t length() const {
         size_t total = 0;
