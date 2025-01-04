@@ -16,7 +16,7 @@ private:
 
     // Maps each character to its corresponding column in the BWT matrix
     // Key: character, Value: string of characters in that column
-    std::map<char, std::string> f_vectors;
+    std::map<char, std::vector<char>> f_vectors;
 
     // Maps each character to its Last-to-First (LF) mapping values
     // Key: character, Value: vector of indices for LF mapping
@@ -79,7 +79,7 @@ private:
     void build_vectors(std::string& bwt, 
         std::map<char, int>& chr_counts,
         std::set<char>& sigma,
-        std::map<char, std::string>& f_vect,
+        std::map<char, std::vector<char>>& f_vect,
         std::map<char, std::vector<int>>& lf_map
     ) 
     {
@@ -102,7 +102,7 @@ private:
         int i = 0, j = 0;
         for (char c : sigma) {
             j = chr_counts[c];
-            f_vect[c] = bwt.substr(i, j);
+            std::copy(bwt.begin() + i, bwt.begin() + i + j, std::back_inserter(f_vect[c]));
             lf_map[c].insert(lf_map[c].end(), mapping.begin()+ i, mapping.begin()+ i +j );
             i += j;
         }
@@ -137,7 +137,7 @@ private:
     void add(std::string substring) {
         std::string bwt = build_bwt(substring);
         std::map<char, int> chr_counts;
-        std::map<char, std::string> f_vect;
+        std::map<char, std::vector<char>> f_vect;
         std::map<char, std::vector<int>> lf_map;
         std::set<char> sigma;
         std::vector<int> mapping;
@@ -156,43 +156,41 @@ private:
         for (char c : sigma) {
             if ( alphabet.contains(c) && sigma.contains(c)) {
                 // Pre-allocate space
-                size_t new_size = f_vectors[c].length() + f_vect[c].length();
+                size_t new_size = f_vectors[c].size() + f_vect[c].size();
                 f_vectors[c].reserve(new_size);
                 lf_mapping[c].reserve(lf_mapping[c].size() + lf_map[c].size());
 
                 // Update LF mapping offsets
-                for (size_t i = 0; i < f_vect[c].length(); i++) {
+                for (size_t i = 0; i < f_vect[c].size(); i++) {
                     char chr = f_vect[c][i];
                     int offset = counts[chr];
                     lf_map[c][i] += offset;
                 }
 
                 // Merge vectors
-                f_vectors[c].append(f_vect[c]);
-                for (int i : lf_map[c]){
-                    lf_mapping[c].push_back(i);
-                }
+                std::copy(f_vect[c].begin(), f_vect[c].end(), std::back_inserter(f_vectors[c]));
+                std::copy(lf_map[c].begin(), lf_map[c].end(), std::back_inserter(lf_mapping[c]));
 
-            }
+            }   
             else if (sigma.contains(c)) {
                 continue;
-                std::cout << "sigma contains: " << c << " " << f_vect[c].length() << " " << lf_map[c].size() << std::endl;
-                size_t new_size = f_vect[c].length();
-                f_vectors[c].reserve(new_size);
-                lf_mapping[c].reserve(lf_map[c].size());
+                // std::cout << "sigma contains: " << c << " " << f_vect[c].length () << " " << lf_map[c].size() << std::endl;
+                // size_t new_size = f_vect[c].length();
+                // f_vectors[c].reserve(new_size);
+                // lf_mapping[c].reserve(lf_map[c].size());
 
-                // Update LF mapping offsets
-                for (size_t i = 0; i < f_vect[c].length(); i++) {
-                    char chr = f_vect[c][i];
-                    int offset = counts[chr];
-                    lf_map[c][i] += offset;
-                }
+                // // Update LF mapping offsets
+                // for (size_t i = 0; i < f_vect[c].length(); i++) {
+                //     char chr = f_vect[c][i];
+                //     int offset = counts[chr];
+                //     lf_map[c][i] += offset;
+                // }
 
-                // Merge vectors
-                f_vectors[c].append(f_vect[c]);
-                for (int i : lf_map[c]){
-                    lf_mapping[c].push_back(i);
-                }
+                // // Merge vectors
+                // f_vectors[c].append(f_vect[c]);
+                // for (int i : lf_map[c]){
+                //     lf_mapping[c].push_back(i);
+                // }
             }
 
         }
@@ -209,9 +207,11 @@ private:
 
     // Get BWT string
     std::string get_bwt() {
+        
         std::string result;
+
         for (char c : alphabet) {
-            result += f_vectors[c];
+            result += std::string(f_vectors[c].begin(), f_vectors[c].end());
         }
         return result;
     }
@@ -244,18 +244,18 @@ private:
         }
         for (char c : alphabet) {
             if (c < pattern[0]) {
-                offset += f_vectors[c].length();
+                offset += f_vectors[c].size();
             }
         }
 
         if (pattern.length() == 1) {
 
-            for (int i = offset; i < offset + f_vectors[pattern[0]].length(); i++) {
+            for (int i = offset; i < offset + f_vectors[pattern[0]].size(); i++) {
                 positions.push_back(i);
             }
             return positions;
         } else if (pattern.length() == 2) {
-            for (int i = 0; i < f_vectors[pattern[0]].length(); i++) {
+            for (int i = 0; i < f_vectors[pattern[0]].size(); i++) {
                 matches.push_back(i);
             }
             for (int i : matches) {
@@ -267,7 +267,7 @@ private:
         }
         else {
 
-            for (int i = 0; i < f_vectors[pattern[0]].length(); i++) {
+            for (int i = 0; i < f_vectors[pattern[0]].size(); i++) {
                 matches.push_back(i);
             }
             char start_char = pattern[0];
@@ -310,12 +310,12 @@ private:
         }
         for (char c : alphabet) {
             if (c < pattern[0]) {
-                offset += f_vectors[c].length();
+                offset += f_vectors[c].size();
             }
         }
 
         if (pattern.length() == 1) {
-            for (int i = offset; i < offset + f_vectors[pattern[0]].length(); i++) {
+            for (int i = offset; i < offset + f_vectors[pattern[0]].size(); i++) {
                 positions.push_back(i);
             }
             if (positions.size() > 0) {
@@ -323,7 +323,7 @@ private:
             }
             return -1;
         } else if (pattern.length() == 2) {
-            for (int i = 0; i < f_vectors[pattern[0]].length(); i++) {
+            for (int i = 0; i < f_vectors[pattern[0]].size(); i++) {
                 matches.push_back(i);
             }
             for (int i : matches) {
@@ -338,7 +338,7 @@ private:
         }
         else {
 
-            for (int i = 0; i < f_vectors[pattern[0]].length(); i++) {
+            for (int i = 0; i < f_vectors[pattern[0]].size(); i++) {
                 matches.push_back(i);
             }
             if (matches.size() == 0) {
@@ -374,7 +374,7 @@ private:
     size_t length() const {
         size_t total = 0;
         for (auto& [c, f_vect] : f_vectors) {
-            total += f_vect.length();
+            total += f_vect.size();
         }
         return total;
     }
@@ -394,9 +394,9 @@ private:
         ss << "Alphabet size: " << alphabet.size() << "\n";
         ss << "Character frequencies:\n";
         for (char c : alphabet) {
-            total_length += f_vectors.at(c).length();
+            total_length += f_vectors.at(c).size();
             ss << "'" << c << "': " << counts.at(c) 
-               << " (F-vector length: " << f_vectors.at(c).length() 
+               << " (F-vector length: " << f_vectors.at(c).size() 
                << ", LF-mapping size: " << lf_mapping.at(c).size() << ")\n";
         }
         
@@ -408,7 +408,7 @@ private:
         ss << "\nBWT preview (first 50 chars): ";
         std::string bwt_preview;
         for (char c : alphabet) {
-            bwt_preview += f_vectors.at(c);
+            bwt_preview += std::string(f_vectors.at(c).begin(), f_vectors.at(c).end());
             if (bwt_preview.length() >= 50) break;
         }
         ss << bwt_preview.substr(0, 50) << "...\n";
@@ -421,8 +421,8 @@ private:
         int j = 0;
 
         for (char c : alphabet) {
-            std::cout << c << " " << f_vectors[c].length() << " " << lf_mapping[c].size() << std::endl;
-            temp += f_vectors[c]    ;
+            std::cout << c << " " << f_vectors[c].size() << " " << lf_mapping[c].size() << std::endl;
+            temp += std::string(f_vectors[c].begin(), f_vectors[c].end());
 
         }
      
